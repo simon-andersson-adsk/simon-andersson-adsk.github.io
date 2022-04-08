@@ -1,40 +1,12 @@
 import './App.css';
 import * as postRobot from "post-robot";
-import {useCallback, useEffect, useState} from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import JSZip from "jszip";
 import UploadSpinner from "./upload.svg"
 import Heatmap from "./heatmap.jpg"
-import area from "@turf/area"
-
-function downloadBlob(blob, filename = "download") {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-}
-
-const b64toBlob = (base64Blob, sliceSize=512) => {
-  const contentType = base64Blob.substring(base64Blob.indexOf(":") + 1, base64Blob.indexOf(";"))
-  const b64Data = base64Blob.substring(base64Blob.indexOf(",") + 1)
-  const byteCharacters = atob(b64Data);
-  const byteArrays = [];
-
-  for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-    const slice = byteCharacters.slice(offset, offset + sliceSize);
-
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
-    }
-
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
-  }
-
-  const blob = new Blob(byteArrays, {type: contentType});
-  return blob;
-}
+import {b64toBlob, downloadBlob, getFeatureCollectionArea} from "./utils";
+import SunStudy from "./SunStudy";
+import { RecoilRoot } from "recoil";
 
 function App() {
   const [fullHourDates, setFullHourDates] = useState()
@@ -85,7 +57,7 @@ function App() {
       const siteConfigRes = await postRobot.send(window.parent, 'getSiteConfig')
       const siteConfig = siteConfigRes.data
       const buildingLimits = siteConfig.find(sc => sc.key === "building_limits").value
-      const areaOfBL = area(buildingLimits);
+      const areaOfBL = getFeatureCollectionArea(buildingLimits);
       setAreaOfBuildLimit(Math.round(areaOfBL/(1000*1000)))
       setLoading(false)
     }
@@ -121,17 +93,6 @@ function App() {
     asyncThings()
   }, [setFullHourDates])
 
-  const turnOffLayers = useCallback(() => {
-    const asyncThings = async () => {
-      await postRobot.send(window.parent, 'setVisibleLayers', ['existing_building_barriers', 'surrounding_building_barriers', 'outdoor_area', 'vegetation_barriers'])
-      await postRobot.send(window.parent, 'divisionLinesVisible', false)
-      await postRobot.send(window.parent, 'zonesVisible', false)
-      await postRobot.send(window.parent, 'functionsVisible', false)
-      await postRobot.send(window.parent, 'setCameraType', "orthographic")
-    }
-    asyncThings()
-  }, [])
-
   const sendHeatmap = useCallback(() => {
     const asyncThings = async () => {
       const test = Heatmap
@@ -150,21 +111,25 @@ function App() {
   }, [])
 
   return (
-    <div className="App">
-      {loading && <img alt="loading spinner" src={UploadSpinner} />}
-      {!loading && (
-        <>
-          <button onClick={() => postRobot.send(window.parent, 'setCameraType', "perspective")}>Set camera to 3d</button>
-          <button onClick={() => postRobot.send(window.parent, 'setCameraType', "orthographic")}>Set camera to 2d</button>
-          <button onClick={getPicturesEachHour}>Get pictures each hour</button>
-          <button onClick={setCameraToCenterOfScene}>Set camera center of site</button>
-          <button onClick={calculateBuildLimit}>Calculate build limit area</button>
-          <button onClick={turnOffLayers}>Turn off layers</button>
-          <button onClick={sendHeatmap}>Send Heatmap</button>
-        </>
-      )}
-      {areaOfBuildLimit && <div>Build limit area: {areaOfBuildLimit} km^2</div>}
-    </div>
+    <RecoilRoot>
+      <React.Suspense fallback={<img alt="loading spinner" src={UploadSpinner} />}>
+        <div className="App">
+          {loading && <img alt="loading spinner" src={UploadSpinner} />}
+          {!loading && (
+            <>
+              <button onClick={() => postRobot.send(window.parent, 'setCameraType', "perspective")}>Set camera to 3d</button>
+              <button onClick={() => postRobot.send(window.parent, 'setCameraType', "orthographic")}>Set camera to 2d</button>
+              <button onClick={getPicturesEachHour}>Get pictures each hour</button>
+              <button onClick={setCameraToCenterOfScene}>Set camera center of site</button>
+              <button onClick={calculateBuildLimit}>Calculate build limit area</button>
+              <button onClick={sendHeatmap}>Send Heatmap</button>
+              <SunStudy />
+            </>
+          )}
+          {areaOfBuildLimit && <div>Build limit area: {areaOfBuildLimit} km^2</div>}
+        </div>
+      </React.Suspense>
+    </RecoilRoot>
   );
 }
 
