@@ -3,6 +3,8 @@ import * as postRobot from "post-robot";
 import {useCallback, useEffect, useState} from "react";
 import JSZip from "jszip";
 import UploadSpinner from "./upload.svg"
+import Heatmap from "./heatmap.jpg"
+import area from "@turf/area"
 
 function downloadBlob(blob, filename = "download") {
   const url = URL.createObjectURL(blob);
@@ -37,8 +39,9 @@ const b64toBlob = (base64Blob, sliceSize=512) => {
 function App() {
   const [fullHourDates, setFullHourDates] = useState()
   const [loading, setLoading] = useState(false)
+  const [areaOfBuildLimit, setAreaOfBuildLimit] = useState()
 
-  const setCameraToCenterOfSite = useCallback(() => {
+  const getPicturesEachHour = useCallback(() => {
     if(!fullHourDates) return
     const asyncThings = async () => {
       setLoading(true)
@@ -75,6 +78,35 @@ function App() {
     asyncThings()
   }, [fullHourDates])
 
+
+  const calculateBuildLimit = useCallback(() => {
+    const asyncThings = async () => {
+      setLoading(true)
+      const siteConfigRes = await postRobot.send(window.parent, 'getSiteConfig')
+      const siteConfig = siteConfigRes.data
+      const buildingLimits = siteConfig.find(sc => sc.key === "building_limits").value
+      const areaOfBL = area(buildingLimits);
+      setAreaOfBuildLimit(Math.round(areaOfBL/(1000*1000)))
+      setLoading(false)
+    }
+    asyncThings()
+  }, [fullHourDates])
+
+  const setCameraToCenterOfScene = useCallback(() => {
+    const asyncThings = async () => {
+      const siteConfigRes = await postRobot.send(window.parent, 'getSiteConfig')
+      const siteConfig = siteConfigRes.data
+      const buildingLimits = siteConfig.find(sc => sc.key === "building_limits").value.features
+      const coords = buildingLimits.flatMap(bl => bl.geometry.coordinates[0])
+      const xMiddle = (coords.reduce((acc, c) => acc + c[0], 0)/coords.length)
+      const yMiddle = (coords.reduce((acc, c) => acc + c[1], 0)/coords.length)
+      await postRobot.send(window.parent, 'setCameraType', "orthographic")
+      await postRobot.send(window.parent, 'rotateCameraToTheta', 0)
+      await postRobot.send(window.parent, 'setCameraPosition', [0, 0, 10])
+    }
+    asyncThings()
+  }, [fullHourDates])
+
   useEffect(() => {
     const asyncThings = async () => {
       const sunRes = await postRobot.send(window.parent, 'getSunState')
@@ -89,6 +121,34 @@ function App() {
     asyncThings()
   }, [setFullHourDates])
 
+  const turnOffLayers = useCallback(() => {
+    const asyncThings = async () => {
+      await postRobot.send(window.parent, 'setVisibleLayers', ['existing_building_barriers', 'surrounding_building_barriers', 'outdoor_area', 'vegetation_barriers'])
+      await postRobot.send(window.parent, 'divisionLinesVisible', false)
+      await postRobot.send(window.parent, 'zonesVisible', false)
+      await postRobot.send(window.parent, 'functionsVisible', false)
+      await postRobot.send(window.parent, 'setCameraType', "orthographic")
+    }
+    asyncThings()
+  }, [])
+
+  const sendHeatmap = useCallback(() => {
+    const asyncThings = async () => {
+      const test = Heatmap
+      const res = await fetch(test)
+      const blob = await res.blob()
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      const base64data = await new Promise(res => {
+        reader.onloadend = function () {
+          res(reader.result);
+        };
+      });
+      await postRobot.send(window.parent, 'setHeatMap', {heatmap: base64data})
+    }
+    asyncThings()
+  }, [])
+
   return (
     <div className="App">
       {loading && <img alt="loading spinner" src={UploadSpinner} />}
@@ -96,9 +156,14 @@ function App() {
         <>
           <button onClick={() => postRobot.send(window.parent, 'setCameraType', "perspective")}>Set camera to 3d</button>
           <button onClick={() => postRobot.send(window.parent, 'setCameraType', "orthographic")}>Set camera to 2d</button>
-          <button onClick={setCameraToCenterOfSite}>Set camera center of site</button>
+          <button onClick={getPicturesEachHour}>Get pictures each hour</button>
+          <button onClick={setCameraToCenterOfScene}>Set camera center of site</button>
+          <button onClick={calculateBuildLimit}>Calculate build limit area</button>
+          <button onClick={turnOffLayers}>Turn off layers</button>
+          <button onClick={sendHeatmap}>Send Heatmap</button>
         </>
       )}
+      {areaOfBuildLimit && <div>Build limit area: {areaOfBuildLimit} km^2</div>}
     </div>
   );
 }
