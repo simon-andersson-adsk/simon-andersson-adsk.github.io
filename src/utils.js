@@ -56,3 +56,6 @@ export const b64toBlob = (base64Blob, sliceSize=512) => {
   const blob = new Blob(byteArrays, {type: contentType});
   return blob;
 }
+
+export const getSiteConfigKey = (sc, key) =>
+  sc.find(sc => sc.key === key)?.value
