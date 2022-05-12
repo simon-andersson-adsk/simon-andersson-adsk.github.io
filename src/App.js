@@ -34,6 +34,14 @@ function App() {
     asyncThings()
   }, [buildingIdx, setBuildingIdx])
 
+  const getGltf = useCallback(() => {
+    const asyncThings = async () => {
+      const gltf = await postRobot.send(window.parent, 'getGeometry', "Analyze")
+      console.log(gltf)
+    }
+    asyncThings()
+  }, [buildingIdx, setBuildingIdx])
+
 
   return (
     <RecoilRoot>
@@ -42,6 +50,7 @@ function App() {
           <img src={Kratos} alt={"ZUEEES"} />
           <button onClick={sendToKronos}>ZEUS!!</button>
           <button onClick={colorBuilding0}>BOY!!</button>
+          <button onClick={getGltf}>GIVE ME GLTF!!</button>
         </div>
       </React.Suspense>
     </RecoilRoot>
