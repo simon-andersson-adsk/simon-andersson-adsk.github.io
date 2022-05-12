@@ -40,7 +40,7 @@ function App() {
       console.log(gltf)
     }
     asyncThings()
-  }, [buildingIdx, setBuildingIdx])
+  }, [])
 
 
   return (
